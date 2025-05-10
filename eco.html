@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>EcoPoints Tracker – EcoReturn</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #f5fff5;
+      color: #2c3e50;
+      padding: 20px;
+      max-width: 600px;
+      margin: auto;
+    }
+    h1 {
+      text-align: center;
+      color: #2ecc71;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 12px;
+      margin: 20px 0;
+      border: 2px solid #2ecc71;
+      border-radius: 6px;
+    }
+    button {
+      background-color: #27ae60;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .card {
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      padding: 20px;
+      margin-top: 20px;
+    }
+    .value {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #27ae60;
+    }
+    .shop-item {
+      background: #f1f8e9;
+      padding: 20px;
+      border: 2px dashed #4caf50;
+      margin: 15px 0;
+      border-radius: 10px;
+      animation: fadeInUp 1s ease-in-out;
+    }
+  </style>
+</head>
+<body>
+  <h1>EcoPoints Tracker</h1>
+  <p>Enter your Mobile Number or Box ID:</p>
+  <input type="text" id="userId" placeholder="e.g. 9876543210 or BOX_101"/>
+  <button onclick="trackUser()">Check My Points</button>
+
+  <div id="result" class="card" style="display: none;">
+    <p><strong>EcoPoints:</strong> <span id="points" class="value"></span></p>
+    <p><strong>Returns Made:</strong> <span id="returns" class="value"></span></p>
+    <p><strong>Plastic Saved:</strong> <span id="plastic" class="value"></span> g</p>
+    <p><strong>CO₂ Reduced:</strong> <span id="co2" class="value"></span>%</p>
+    <p><strong>Your Rank:</strong> <span id="rank" class="value"></span></p>
+  </div>
+
+  <div style="text-align:center; margin-top: 20px;">
+    <button onclick="generateCertificate()">🎉 Download Eco Certificate</button>
+  </div>
+
+  <section style="margin-top: 40px;">
+    <h2 style="text-align:center; color: #4caf50;">🎁 Redeem Your EcoPoints</h2>
+    <div class="shop-item">
+      <h3>Bamboo Toothbrush</h3>
+      <p>Redeem for: <strong>50 EcoPoints</strong></p>
+    </div>
+    <div class="shop-item">
+      <h3>Eco Cloth Bag</h3>
+      <p>Redeem for: <strong>80 EcoPoints</strong></p>
+    </div>
+    <div class="shop-item">
+      <h3>Metal Straw Kit</h3>
+      <p>Redeem for: <strong>100 EcoPoints</strong></p>
+    </div>
+  </section>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script>
+    const googleSheetURL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vScbNL75gAfjFjollN0F_u3llHV0duO7M2kN_whPknZJIEA8ilSeQxte6TH-JsdjIMw7bBRRDz9SCVu/pub?output=csv";
+
+    const userData = {};
+
+    async function fetchGoogleSheetData() {
+      try {
+        console.log("Fetching data from Google Sheets..."); // Debugging: Log fetch start
+        const response = await fetch(googleSheetURL);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const csvData = await response.text();
+        console.log("Fetched CSV Data:", csvData); // Debugging: Log fetched CSV data
+        parseCSVData(csvData);
+      } catch (error) {
+        console.error("Error fetching Google Sheets data:", error);
+      }
+    }
+
+    function parseCSVData(csv) {
+      const rows = csv.split("\n");
+      const headers = rows[0].split(",").map(header => header.trim()); // Extract headers
+      const mobileIndex = headers.indexOf("Mobile Number");
+      const boxIDIndex = headers.indexOf("Box ID");
+      const scoreIndex = headers.indexOf("Score");
+      const returnedIndex = headers.indexOf("Returned");
+
+      rows.forEach((row, index) => {
+        if (index === 0) return; // Skip header row
+        const columns = row.split(",");
+        const mobile = columns[mobileIndex]?.trim();
+        const boxID = columns[boxIDIndex]?.trim();
+        const score = columns[scoreIndex]?.trim();
+        const returned = columns[returnedIndex]?.trim();
+
+        if (mobile || boxID) {
+          const formattedMobile = mobile;
+          const formattedBoxID = boxID?.replace(/[^0-9]/g, ""); // Extract only numbers from Box ID
+
+          // Initialize or update user data for mobile number
+          if (!userData[formattedMobile]) {
+            userData[formattedMobile] = { points: 0, returns: 0 };
+          }
+          userData[formattedMobile].points += parseInt(score) || 0;
+          userData[formattedMobile].returns += returned === "Yes" ? 1 : 0;
+
+          // Initialize or update user data for box ID
+          if (!userData[formattedBoxID]) {
+            userData[formattedBoxID] = { points: 0, returns: 0 };
+          }
+          userData[formattedBoxID].points += parseInt(score) || 0;
+          userData[formattedBoxID].returns += returned === "Yes" ? 1 : 0;
+        }
+      });
+      console.log("Parsed User Data:", userData); // Debugging: Log the final user data
+    }
+
+    fetchGoogleSheetData();
+
+    function trackUser() {
+      const id = document.getElementById("userId").value.trim();
+      console.log("Tracking User ID:", id); // Debugging: Log the entered ID
+      const resultDiv = document.getElementById("result");
+
+      if (userData[id]) {
+        const { points, returns } = userData[id];
+        console.log("User Data Found:", userData[id]); // Debugging: Log the user data found
+        document.getElementById("points").textContent = points;
+        document.getElementById("returns").textContent = returns;
+        document.getElementById("plastic").textContent = (returns * 30);
+        document.getElementById("co2").textContent = (returns * 8.5);
+
+        // Rank logic
+        let rank = "Beginner";
+        if (points >= 80) rank = "♻️ Eco Warrior";
+        else if (points >= 50) rank = "🌿 Eco Saver";
+        else if (points >= 20) rank = "🌱 Eco Starter";
+
+        document.getElementById("rank").textContent = rank;
+
+        resultDiv.style.display = "block";
+      } else {
+        console.log("No Data Found for ID:", id); // Debugging: Log if no data is found
+        resultDiv.style.display = "block";
+        document.getElementById("points").textContent = "0";
+        document.getElementById("returns").textContent = "0";
+        document.getElementById("plastic").textContent = "0";
+        document.getElementById("co2").textContent = "0";
+        document.getElementById("rank").textContent = "Unregistered ID";
+      }
+    }
+
+    function generateCertificate() {
+      const { jsPDF } = window.jspdf;
+      const id = document.getElementById("userId").value.trim();
+      const ecoPoints = document.getElementById("points").textContent;
+      const returns = document.getElementById("returns").textContent;
+
+      const doc = new jsPDF();
+      doc.setFontSize(22);
+      doc.setTextColor("#4caf50");
+      doc.text("🌿 EcoReturn Certificate", 105, 30, { align: "center" });
+
+      doc.setFontSize(14);
+      doc.setTextColor("#000000");
+      doc.text("This certifies that", 105, 50, { align: "center" });
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.text(id || "User", 105, 60, { align: "center" });
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(14);
+      doc.text(`has earned ${ecoPoints} EcoPoints from ${returns} returns.`, 105, 75, { align: "center" });
+      doc.text("Plastic Saved: " + (returns * 30) + "g", 105, 85, { align: "center" });
+      doc.text("CO₂ Reduced: " + (returns * 8.5) + "%", 105, 95, { align: "center" });
+
+      doc.setFontSize(12);
+      doc.setTextColor("#4caf50");
+      doc.text("Keep saving the planet!", 105, 115, { align: "center" });
+
+      doc.save("EcoCertificate.pdf");
+    }
+  </script>
+</body>
+</html>
